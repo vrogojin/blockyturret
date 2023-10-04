@@ -1,0 +1,10 @@
+name: BlockyTurret
+version: 1.0
+author: cryptohog
+main: fi.blocky.blockyturret.bukkit.BlockyTurret
+api-version: 1.19
+description: Automated turrets that protect bases by shooting players and mobs in their line of sight.
+folia-supported: true
+
+commands:
+  # No commands are used in this plugin.
