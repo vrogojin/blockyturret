@@ -38,6 +38,7 @@ import org.bukkit.util.Vector;
 import io.papermc.paper.threadedregions.scheduler.RegionScheduler;
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 
+import java.util.Collections;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -215,6 +216,11 @@ public class BlockyTurret extends JavaPlugin implements Listener {
     	    for (Entity entity : block.getWorld().getNearbyEntities(turretLoc, range, range, range)) {
         	if (entity instanceof LivingEntity && entity.getType().isAlive() && !isNeutralMob(entity.getType())) {
 		    if (turretPassphrase != null && entity instanceof Player && (playerHasPassphrase((Player) entity, turretPassphrase)||(((Player)entity).isDead()))) {
+			((Player)entity).spawnParticle(Particle.VILLAGER_HAPPY,  
+                                block.getLocation(),
+                                10,  // Count of particles
+                                0.5, 0.5, 0.5,  // Offset
+                                0);  // Speed
 			getLogger().info("Entity is authorized or dead, skipping");
 		        continue;
 		    }
