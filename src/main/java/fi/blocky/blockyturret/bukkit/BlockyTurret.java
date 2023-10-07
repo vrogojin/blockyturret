@@ -8,10 +8,13 @@ import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Particle;
 import org.bukkit.World;
+import org.bukkit.block.BlastFurnace;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.BlockState;
 import org.bukkit.block.Dispenser;
+import org.bukkit.block.Furnace;
+import org.bukkit.block.TileState;
 import org.bukkit.block.data.Directional;
 import org.bukkit.entity.Arrow;
 import org.bukkit.entity.Entity;
@@ -20,12 +23,21 @@ import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.inventory.FurnaceBurnEvent;
+import org.bukkit.event.inventory.FurnaceSmeltEvent;
+import org.bukkit.event.inventory.InventoryMoveItemEvent;
+import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.event.world.ChunkUnloadEvent;
+import org.bukkit.inventory.BlastingRecipe;
+import org.bukkit.inventory.FurnaceInventory;
+import org.bukkit.inventory.FurnaceRecipe;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.PotionMeta;
+import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
@@ -40,8 +52,10 @@ import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 
 import java.util.Collections;
 import java.util.Map;
-import java.util.HashMap;
-import java.util.HashSet;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.Semaphore;
+//import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Set;
 import java.util.logging.Logger;
@@ -53,7 +67,8 @@ public class BlockyTurret extends JavaPlugin implements Listener {
     private NamespacedKey passphraseKey;
 
 //    private Set<Location> turrets = new HashSet<>();
-    private Map<Location, String> turretPassphrases = new HashMap<>();
+    private final ConcurrentMap<Location, Semaphore> turretSemaphores = new ConcurrentHashMap<>();
+    private Map<Location, String> blockPassphrases = new ConcurrentHashMap<>();
 
     private RegionScheduler regionScheduler;
 
@@ -67,6 +82,7 @@ public class BlockyTurret extends JavaPlugin implements Listener {
 
 	passphraseKey = new NamespacedKey(this, "BlockyTurret_turretPassphrase");
 
+	createEmeraldBurnRecipe();
 /*        new BukkitRunnable() {
             @Override
             public void run() {
@@ -83,6 +99,11 @@ public class BlockyTurret extends JavaPlugin implements Listener {
     @EventHandler
     public void onBlockPlace(BlockPlaceEvent event) {
         Block block = event.getBlock();
+	Player player = event.getPlayer();
+	if(!blockNeighborhoodFree(block, player)){
+            event.setCancelled(true);
+            return;
+        }
 //        if (block.getType() == Material.DISPENSER && block.getRelative(0, -1, 0).getType() == Material.OBSERVER) {
 	  if(isTurret(block)){
 //            turrets.add(block.getLocation());
@@ -100,23 +121,33 @@ public class BlockyTurret extends JavaPlugin implements Listener {
     }
 
     @EventHandler
+    public void onBlockBreak(BlockBreakEvent event) {
+        Block block = event.getBlock();
+	Player player = event.getPlayer();
+	if(!blockNeighborhoodFree(block, player)){
+            event.setCancelled(true);
+            return;
+        }
+	blockPassphrases.remove(block.getLocation());
+    }
+
+    @EventHandler
     public void onChunkLoad(ChunkLoadEvent event) {
         for (BlockState blockState : event.getChunk().getTileEntities()) {
-            Block block = blockState.getBlock();
-//            if (block.getType() == Material.DISPENSER && block.getRelative(0, -1, 0).getType() == Material.OBSERVER) {
+    	      Block block = blockState.getBlock();
 	      if(isTurret(block)){
 //                turrets.add(block.getLocation());
 		scheduleTurret(block);
-		if (blockState instanceof Dispenser) {
-		    Dispenser dispenser = (Dispenser) blockState;
-            	    PersistentDataContainer dataContainer = dispenser.getPersistentDataContainer();
-            	    if (dataContainer.has(passphraseKey, PersistentDataType.STRING)) {
-                	String passphrase = dataContainer.get(passphraseKey, PersistentDataType.STRING);
-                	turretPassphrases.put(block.getLocation(), passphrase);
-            	    }
-        	}
-                getLogger().info("BlockyTurret loaded");
-            }
+		getLogger().info("BlockyTurret loaded");
+	      }
+	      if(blockState instanceof TileState) {
+		TileState tileState = (TileState)blockState;
+                PersistentDataContainer dataContainer = tileState.getPersistentDataContainer();
+            	if (dataContainer.has(passphraseKey, PersistentDataType.STRING)) {
+            	    String passphrase = dataContainer.get(passphraseKey, PersistentDataType.STRING);
+            	    blockPassphrases.put(block.getLocation(), passphrase);
+            	}
+    	      }
         }
     }
 
@@ -139,46 +170,104 @@ public class BlockyTurret extends JavaPlugin implements Listener {
 	ItemStack itemInHand = player.getInventory().getItemInMainHand();
 	Block clickedBlock = event.getClickedBlock();
 
-	if (clickedBlock != null && isTurret(clickedBlock)) {
-    	    String turretPassphrase = turretPassphrases.get(clickedBlock.getLocation());
+//	if (clickedBlock != null && isTurret(clickedBlock)) {
+	if(clickedBlock == null)return;
+	BlockState blockState = clickedBlock.getState();
+	if (clickedBlock != null && (blockState instanceof TileState)) {
+	    TileState tileState = (TileState)blockState;
+    	    String blockPassphrase = blockPassphrases.get(clickedBlock.getLocation());
 
     	    if (itemInHand.getType() == Material.PAPER) {
         	ItemMeta meta = itemInHand.getItemMeta();
         	if (meta != null && meta.hasDisplayName()) {
             	    String paperPassphrase = meta.getDisplayName();
-                
-            	    if (turretPassphrase == null || playerHasPassphrase(player, turretPassphrase)) {
-                	turretPassphrases.put(clickedBlock.getLocation(), paperPassphrase);
-			BlockState blockState = clickedBlock.getState();
-		        if (blockState instanceof Dispenser) {
-			    Dispenser dispenser = (Dispenser) blockState;
-		            PersistentDataContainer dataContainer = dispenser.getPersistentDataContainer();
-		            dataContainer.set(passphraseKey, PersistentDataType.STRING, paperPassphrase);
-		            blockState.update();
-		        }
-                	player.sendMessage(ChatColor.GREEN + "Turret passphrase has been updated.");
+            	    if (blockPassphrase == null || playerHasPassphrase(player, blockPassphrase)) {
+                	blockPassphrases.put(clickedBlock.getLocation(), paperPassphrase);
+		        PersistentDataContainer dataContainer = tileState.getPersistentDataContainer();
+		        dataContainer.set(passphraseKey, PersistentDataType.STRING, paperPassphrase);
+		        blockState.update();
+                	player.sendMessage(ChatColor.GREEN + "Block passphrase has been updated.");
             	    } else {
-                	player.sendMessage(ChatColor.RED + "You are not authorized to change the turret passphrase.");
+                	player.sendMessage(ChatColor.RED + "You are not authorized to change the block passphrase.");
             	    }
         	}
     	    }
 	}
     }
 
-/*    private void checkTurrets() {
-	Iterator<Location> iterator = turrets.iterator();
-	
-    }*/
+    private void createEmeraldBurnRecipe() {
+        // Define the source item (emerald)
+        ItemStack sourceItem = new ItemStack(Material.EMERALD);
+
+        // Define the result (air)
+        ItemStack resultItem = new ItemStack(Material.ENDER_PEARL);
+
+        // Create the furnace recipe with long cooking time
+        FurnaceRecipe burnEmerald = new FurnaceRecipe(new NamespacedKey(this, "generate_protection"), resultItem, sourceItem.getType(), 0, 72000);  // 72000 ticks = 1 hour
+	BlastingRecipe blastingRecipe = new BlastingRecipe(new NamespacedKey(this, "emerald_to_ender_pearl_blasting"), resultItem, sourceItem.getType(), 0.1f, 144000);  // 36000 ticks = 30 minutes
+
+        // Add the recipe to the server
+        getServer().addRecipe(burnEmerald);
+	getServer().addRecipe(blastingRecipe);
+    }
+
+    private boolean blockNeighborhoodFree(Block block, Player player){
+	int r = 15;
+        Location loc = block.getLocation();
+        for (int x = -r; x <= r; x++) {
+            for (int y = -r; y <= r; y++) {
+                for (int z = -r; z <= r; z++) {
+//                    if (x == 0 && y == 0 && z == 0) continue; // skip the original block
+                    Block neighborBlock = loc.clone().add(x, y, z).getBlock();
+		    if(!authorizeBlockOp(neighborBlock, player, Math.max(Math.max(Math.abs(x), Math.abs(y)), Math.abs(z))))
+			return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    private boolean authorizeBlockOp(Block block, Player player, int dist){
+	Material blockType = block.getType();
+	if(((blockType == Material.FURNACE)&&(dist < 8))||(blockType == Material.BLAST_FURNACE)){
+	    String blockPassphrase = blockPassphrases.get(block.getLocation());
+	    if(blockPassphrase != null && (playerHasPassphrase(player, blockPassphrase)))
+		return true;
+	    int burnTime = (blockType == Material.FURNACE)?((Furnace)block.getState()).getBurnTime():
+		((BlastFurnace)block.getState()).getBurnTime();
+	    if(burnTime>0){
+		ItemStack smeltingItem = (blockType == Material.FURNACE)?((Furnace)block.getState()).getInventory().getSmelting():
+		    ((BlastFurnace)block.getState()).getInventory().getSmelting();
+		if(smeltingItem.getType() == Material.EMERALD){
+		    return false;
+		}
+	    }
+	}
+	return true;
+    }
 
     private ScheduledTask scheduleTurret(Block block){
-	return regionScheduler.runDelayed(
-	    this,
-	    block.getLocation(),
-	    (task) -> {
-		runTurret(block.getLocation());
-	    },
-	    20L
-	);
+	Location location = block.getLocation();
+//	getLogger().info("CHECKPOINT1");
+	try{
+	    if(!acquireTurretTaskSemaphore(location))return null;
+//	    getLogger().info("CHECKPOINT2");
+	    return regionScheduler.runDelayed(
+		this,
+		location,
+		(task) -> {
+//		    getLogger().info("CHECKPOINT3");
+		    releaseTurretTaskSemaphore(location);
+//		    getLogger().info("CHECKPOINT4");
+		    runTurret(location);
+//		    getLogger().info("CHECKPOINT5");
+		},
+		20L
+	    );
+	}catch(Throwable e){
+	    getLogger().severe("Could not aquire lock");
+	    return null;
+	}
     }
 
     private void runTurret(Location turretLoc) {
@@ -189,7 +278,7 @@ public class BlockyTurret extends JavaPlugin implements Listener {
 	    if(!isTurret(block)){
         	// The turret has been destroyed, remove it from the set
 //        	iterator.remove();
-		turretPassphrases.remove(turretLoc);
+		blockPassphrases.remove(turretLoc);
         	getLogger().info("BlockyTurret destroyed");
         	return;
     	    }
@@ -207,7 +296,7 @@ public class BlockyTurret extends JavaPlugin implements Listener {
     	    BlockFace facing = ((Directional) block.getBlockData()).getFacing();
     	    Vector turretFacingDirection = facing.getDirection();
     	    Location turretEyeLocation = turretLoc.clone().add(0.5, 0.5, 0.5).add(turretFacingDirection.clone().multiply(0.51));
-	    String turretPassphrase = turretPassphrases.get(turretLoc);
+	    String turretPassphrase = blockPassphrases.get(turretLoc);
 
     	    double range = 8.0;
 
@@ -385,5 +474,20 @@ public class BlockyTurret extends JavaPlugin implements Listener {
     	    entityType == EntityType.PARROT ||
     	    entityType == EntityType.TURTLE;
     }
+
+    private Semaphore getTurretTaskSemaphore(Location location) {
+        return turretSemaphores.computeIfAbsent(location, k -> new Semaphore(1));
+    }
+
+    private boolean acquireTurretTaskSemaphore(Location location) throws InterruptedException {
+        Semaphore semaphore = getTurretTaskSemaphore(location);
+        return semaphore.tryAcquire();
+    }
+
+    private void releaseTurretTaskSemaphore(Location location) {
+        Semaphore semaphore = getTurretTaskSemaphore(location);
+        semaphore.release();
+    }
+
 
 }
