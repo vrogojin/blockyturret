@@ -12,7 +12,9 @@ import org.bukkit.block.BlastFurnace;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.BlockState;
+import org.bukkit.block.Container;
 import org.bukkit.block.Dispenser;
+import org.bukkit.block.DoubleChest;
 import org.bukkit.block.Furnace;
 import org.bukkit.block.TileState;
 import org.bukkit.block.data.Directional;
@@ -28,6 +30,7 @@ import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.inventory.FurnaceBurnEvent;
 import org.bukkit.event.inventory.FurnaceSmeltEvent;
 import org.bukkit.event.inventory.InventoryMoveItemEvent;
+import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
@@ -174,25 +177,86 @@ public class BlockyTurret extends JavaPlugin implements Listener {
 	if(clickedBlock == null)return;
 	BlockState blockState = clickedBlock.getState();
 	if (clickedBlock != null && (blockState instanceof TileState)) {
-	    TileState tileState = (TileState)blockState;
-    	    String blockPassphrase = blockPassphrases.get(clickedBlock.getLocation());
-
     	    if (itemInHand.getType() == Material.PAPER) {
         	ItemMeta meta = itemInHand.getItemMeta();
         	if (meta != null && meta.hasDisplayName()) {
             	    String paperPassphrase = meta.getDisplayName();
-            	    if (blockPassphrase == null || playerHasPassphrase(player, blockPassphrase)) {
-                	blockPassphrases.put(clickedBlock.getLocation(), paperPassphrase);
-		        PersistentDataContainer dataContainer = tileState.getPersistentDataContainer();
-		        dataContainer.set(passphraseKey, PersistentDataType.STRING, paperPassphrase);
-		        blockState.update();
-                	player.sendMessage(ChatColor.GREEN + "Block passphrase has been updated.");
+		    
+//		    String blockPassphrase = blockPassphrases.get(clickedBlock.getLocation());
+//            	    if (blockPassphrase == null || playerHasPassphrase(player, blockPassphrase)) {
+		    if(authorizeInvAccess(clickedBlock, player)){
+			DoubleChest doubleChest = getDoubleChest(blockState);
+			if(doubleChest != null){
+				Block leftBlock = ((BlockState)doubleChest.getLeftSide()).getLocation().getBlock();
+        			Block rightBlock = ((BlockState)doubleChest.getRightSide()).getLocation().getBlock();
+				setBlockPasswd(leftBlock, paperPassphrase);
+				setBlockPasswd(rightBlock, paperPassphrase);
+				player.sendMessage(ChatColor.GREEN + "Double chest passphrase has been updated.");
+			}else{
+			    setBlockPasswd(clickedBlock, paperPassphrase);
+                	    player.sendMessage(ChatColor.GREEN + "Block passphrase has been updated.");
+			}
+			event.setCancelled(true);
             	    } else {
                 	player.sendMessage(ChatColor.RED + "You are not authorized to change the block passphrase.");
             	    }
         	}
     	    }
 	}
+    }
+
+    private void setBlockPasswd(Block block, String passwd){
+        blockPassphrases.put(block.getLocation(), passwd);
+	TileState tileState = (TileState)block.getState();
+	PersistentDataContainer dataContainer = tileState.getPersistentDataContainer();
+	dataContainer.set(passphraseKey, PersistentDataType.STRING, passwd);
+	tileState.update();
+    }
+
+    @EventHandler
+    public void onInventoryOpen(InventoryOpenEvent event) {
+	// Check if the holder of the inventory is a BlockState
+	Player player = (Player) event.getPlayer();
+	if (event.getInventory().getHolder() instanceof DoubleChest) {
+	    DoubleChest doubleChest = (DoubleChest)event.getInventory().getHolder();
+	    Block leftBlock = ((BlockState)doubleChest.getLeftSide()).getLocation().getBlock();
+    	    Block rightBlock = ((BlockState)doubleChest.getRightSide()).getLocation().getBlock();
+	    if(!authorizeInvAccess(leftBlock, player)&&!authorizeInvAccess(rightBlock, player)){
+		event.setCancelled(true);
+            	player.sendMessage(ChatColor.RED + "You are not authorized to access this double chest!");
+		return;
+	    }
+	}else if(event.getInventory().getHolder() instanceof BlockState){
+    	    // Get the block
+	    BlockState blockState = (BlockState)event.getInventory().getHolder();
+    	    Block block = ((BlockState) event.getInventory().getHolder()).getBlock();
+	    if(!authorizeInvAccess(block, player)){
+		event.setCancelled(true);
+            	player.sendMessage(ChatColor.RED + "You are not authorized to access this inventory!");
+		return;
+	    }
+	}
+/*	    String blockPassphrase = blockPassphrases.get(block.getLocation());
+	    if (blockPassphrase != null && !playerHasPassphrase(player, blockPassphrase)) {
+		event.setCancelled(true);
+                player.sendMessage("You are not authorized to access this inventory!");
+	    }*/
+    }
+
+    private boolean authorizeInvAccess(Block block, Player player){
+	String blockPassphrase = blockPassphrases.get(block.getLocation());
+	return (blockPassphrase == null || playerHasPassphrase(player, blockPassphrase));
+    }
+
+    private DoubleChest getDoubleChest(BlockState blockState){
+	if(blockState instanceof Container){
+	    Container container = (Container)blockState;
+	    if(container.getInventory().getHolder() instanceof DoubleChest)
+		return ((DoubleChest)container.getInventory().getHolder());
+	    else
+		return null;
+	}else
+	    return null;
     }
 
     private void createEmeraldBurnRecipe() {
