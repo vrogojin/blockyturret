@@ -28,6 +28,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockDispenseEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.inventory.FurnaceBurnEvent;
 import org.bukkit.event.inventory.FurnaceSmeltEvent;
@@ -253,11 +254,76 @@ public class BlockyTurret extends JavaPlugin implements Listener {
 		return;
 	    }
 	}
-/*	    String blockPassphrase = blockPassphrases.get(block.getLocation());
-	    if (blockPassphrase != null && !playerHasPassphrase(player, blockPassphrase)) {
-		event.setCancelled(true);
-                player.sendMessage("You are not authorized to access this inventory!");
-	    }*/
+    }
+
+    @EventHandler
+    public void onBlockDispense(BlockDispenseEvent event) {
+        if (event.getBlock().getType() == Material.DISPENSER) {
+            Dispenser dispenser = (Dispenser) event.getBlock().getState();
+            ItemStack[] contents = dispenser.getInventory().getContents();
+            getLogger().info("CHECKPOINT1");
+	    ItemStack dispensedItem = event.getItem();
+	    if (dispensedItem.getType() == Material.DIAMOND_AXE) {
+        	chopWood(event.getBlock());
+        	event.setCancelled(true); // Prevent the axe from being dispensed
+    	    } else if (dispensedItem.getType() == Material.DIAMOND_PICKAXE) {
+        	breakBlock(event.getBlock());
+        	event.setCancelled(true); // Prevent the pickaxe from being dispensed
+    	    }
+            for (ItemStack item : contents) {
+		getLogger().info("CHECKPOINT1.5");
+                if (item != null) {
+		    getLogger().info("CHECKPOINT2");
+                    if (item.getType() == Material.DIAMOND_AXE) {
+			getLogger().info("CHECKPOINT3");
+                        chopWood(dispenser.getBlock());
+                        event.setCancelled(true); // Prevent the axe from being dispensed
+                        return;
+                    } else if (item.getType() == Material.DIAMOND_PICKAXE) {
+			getLogger().info("CHECKPOINT4");
+                        breakBlock(dispenser.getBlock());
+                        event.setCancelled(true); // Prevent the pickaxe from being dispensed
+                        return;
+                    }
+		    getLogger().info("CHECKPOINT5");
+                }
+            }
+        }
+    }
+
+    private void chopWood(Block dispenserBlock) {
+        BlockFace facing = getDispenserFacing(dispenserBlock);
+        Block targetBlock = dispenserBlock.getRelative(facing);
+        if (isWoodLog(targetBlock.getType())) {
+            targetBlock.breakNaturally(new ItemStack(Material.DIAMOND_AXE));
+        }
+    }
+
+    private void breakBlock(Block dispenserBlock) {
+        BlockFace facing = getDispenserFacing(dispenserBlock);
+        dispenserBlock.getRelative(facing).breakNaturally(new ItemStack(Material.DIAMOND_PICKAXE));
+    }
+
+    private BlockFace getDispenserFacing(Block dispenserBlock) {
+	if (dispenserBlock.getBlockData() instanceof Directional) {
+    	    Directional directional = (Directional) dispenserBlock.getBlockData();
+    	    return directional.getFacing();
+	}
+	return null; // This shouldn't happen for a dispenser, but it's a good fallback just in case.
+    }
+
+    private boolean isWoodLog(Material material) {
+        switch (material) {
+            case OAK_LOG:
+            case SPRUCE_LOG:
+            case BIRCH_LOG:
+            case JUNGLE_LOG:
+            case ACACIA_LOG:
+            case DARK_OAK_LOG:
+                return true;
+            default:
+                return false;
+        }
     }
 
     private boolean authorizeInvAccess(Block block, Player player){
@@ -538,6 +604,8 @@ public class BlockyTurret extends JavaPlugin implements Listener {
 	}
 	return null; // Return -1 if no projectile slot is found
     }
+
+    
 
     private EntityType getProjectileTypeFromItemStack(ItemStack itemStack) {
 	Material material = itemStack.getType();
