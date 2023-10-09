@@ -16,6 +16,7 @@ import org.bukkit.block.Container;
 import org.bukkit.block.Dispenser;
 import org.bukkit.block.DoubleChest;
 import org.bukkit.block.Furnace;
+import org.bukkit.block.Sign;
 import org.bukkit.block.TileState;
 import org.bukkit.block.data.Directional;
 import org.bukkit.entity.Arrow;
@@ -25,6 +26,7 @@ import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.inventory.FurnaceBurnEvent;
@@ -170,20 +172,17 @@ public class BlockyTurret extends JavaPlugin implements Listener {
     @EventHandler
     public void onPlayerInteract(PlayerInteractEvent event) {
 	Player player = event.getPlayer();
-	ItemStack itemInHand = player.getInventory().getItemInMainHand();
 	Block clickedBlock = event.getClickedBlock();
 
-//	if (clickedBlock != null && isTurret(clickedBlock)) {
 	if(clickedBlock == null)return;
 	BlockState blockState = clickedBlock.getState();
 	if (clickedBlock != null && (blockState instanceof TileState)) {
+	    ItemStack itemInHand = player.getInventory().getItemInMainHand();
     	    if (itemInHand.getType() == Material.PAPER) {
         	ItemMeta meta = itemInHand.getItemMeta();
         	if (meta != null && meta.hasDisplayName()) {
             	    String paperPassphrase = meta.getDisplayName();
 		    
-//		    String blockPassphrase = blockPassphrases.get(clickedBlock.getLocation());
-//            	    if (blockPassphrase == null || playerHasPassphrase(player, blockPassphrase)) {
 		    if(authorizeInvAccess(clickedBlock, player)){
 			DoubleChest doubleChest = getDoubleChest(blockState);
 			if(doubleChest != null){
@@ -203,6 +202,24 @@ public class BlockyTurret extends JavaPlugin implements Listener {
         	}
     	    }
 	}
+	if(blockState instanceof Sign){
+	    if(!authorizeInvAccess(clickedBlock, player)){
+		event.setCancelled(true);
+		player.sendMessage(ChatColor.RED + "You are not authorized to change text on the block");
+	    }
+	}
+	if (event.getAction() == Action.RIGHT_CLICK_BLOCK) {
+            Material blockType = clickedBlock.getType();
+            
+            // Check if the block is interactive
+            if (isInteractiveBlock(blockType)) {
+                // Apply your custom condition
+		if(!blockNeighborhoodFree(clickedBlock, player)){
+        	    event.setCancelled(true);
+		    event.getPlayer().sendMessage(ChatColor.RED + "You cannot interact with this block right now!");
+    		}
+            }
+        }
     }
 
     private void setBlockPasswd(Block block, String passwd){
@@ -257,6 +274,64 @@ public class BlockyTurret extends JavaPlugin implements Listener {
 		return null;
 	}else
 	    return null;
+    }
+
+    private boolean isInteractiveBlock(Material material) {
+	switch (material) {
+    	    // Doors
+    	    case OAK_DOOR:
+    	    case SPRUCE_DOOR:
+    	    case BIRCH_DOOR:
+    	    case JUNGLE_DOOR:
+    	    case ACACIA_DOOR:
+    	    case DARK_OAK_DOOR:
+    	    case IRON_DOOR:
+        
+    	    // Trapdoors
+    	    case OAK_TRAPDOOR:
+    	    case SPRUCE_TRAPDOOR:
+    	    case BIRCH_TRAPDOOR:
+    	    case JUNGLE_TRAPDOOR:
+    	    case ACACIA_TRAPDOOR:
+    	    case DARK_OAK_TRAPDOOR:
+    	    case IRON_TRAPDOOR:
+        
+    	    // Gates
+    	    case OAK_FENCE_GATE:
+    	    case SPRUCE_FENCE_GATE:
+    	    case BIRCH_FENCE_GATE:
+    	    case JUNGLE_FENCE_GATE:
+    	    case ACACIA_FENCE_GATE:
+    	    case DARK_OAK_FENCE_GATE:
+        
+    	    // Levers
+    	    case LEVER:
+        
+    	    // Stone buttons
+    	    case STONE_BUTTON:
+    	    case POLISHED_BLACKSTONE_BUTTON:
+        
+    	    // Wooden buttons
+    	    case OAK_BUTTON:
+    	    case SPRUCE_BUTTON:
+	    case BIRCH_BUTTON:
+    	    case JUNGLE_BUTTON:
+    	    case ACACIA_BUTTON:
+    	    case DARK_OAK_BUTTON:
+    	
+	    // Redstone devices
+	    case COMPARATOR:
+	    case REPEATER:
+	    case DAYLIGHT_DETECTOR:
+
+	    // Bees
+	    case BEEHIVE:
+	    case BEE_NEST:
+        
+            return true;
+        default:
+            return false;
+	}
     }
 
     private void createEmeraldBurnRecipe() {
