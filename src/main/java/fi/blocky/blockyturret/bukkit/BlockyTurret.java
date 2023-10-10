@@ -261,31 +261,51 @@ public class BlockyTurret extends JavaPlugin implements Listener {
         if (event.getBlock().getType() == Material.DISPENSER) {
             Dispenser dispenser = (Dispenser) event.getBlock().getState();
             ItemStack[] contents = dispenser.getInventory().getContents();
-            getLogger().info("CHECKPOINT1");
+//            getLogger().info("CHECKPOINT1");
 	    ItemStack dispensedItem = event.getItem();
 	    if (dispensedItem.getType() == Material.DIAMOND_AXE) {
         	chopWood(event.getBlock());
         	event.setCancelled(true); // Prevent the axe from being dispensed
+		return;
     	    } else if (dispensedItem.getType() == Material.DIAMOND_PICKAXE) {
         	breakBlock(event.getBlock());
         	event.setCancelled(true); // Prevent the pickaxe from being dispensed
-    	    }
+		return;
+    	    } else if (isTreeSapling(dispensedItem.getType())) {
+                BlockFace facing = getDispenserFacing(dispenser.getBlock());
+                Block frontBlock = event.getBlock().getRelative(facing);
+                if (plantSapling(frontBlock, dispensedItem)) {
+//                    frontBlock.setType(dispensedItem.getType());
+                    event.setCancelled(true);  // Prevent the sapling from being dispensed out
+
+		    // Schedule the sapling consumption for the next tick
+		    regionScheduler.runDelayed(
+			this,
+			dispenser.getBlock().getLocation(),
+			(task) -> {
+		    		consumeItemFromDispenser(dispenser, dispensedItem.getType());
+			},
+			1L
+		    );
+		    return;
+                }
+            }
             for (ItemStack item : contents) {
-		getLogger().info("CHECKPOINT1.5");
+//		getLogger().info("CHECKPOINT1.5");
                 if (item != null) {
-		    getLogger().info("CHECKPOINT2");
+//		    getLogger().info("CHECKPOINT2");
                     if (item.getType() == Material.DIAMOND_AXE) {
-			getLogger().info("CHECKPOINT3");
+//			getLogger().info("CHECKPOINT3");
                         chopWood(dispenser.getBlock());
                         event.setCancelled(true); // Prevent the axe from being dispensed
                         return;
                     } else if (item.getType() == Material.DIAMOND_PICKAXE) {
-			getLogger().info("CHECKPOINT4");
+//			getLogger().info("CHECKPOINT4");
                         breakBlock(dispenser.getBlock());
                         event.setCancelled(true); // Prevent the pickaxe from being dispensed
                         return;
                     }
-		    getLogger().info("CHECKPOINT5");
+//		    getLogger().info("CHECKPOINT5");
                 }
             }
         }
@@ -312,6 +332,20 @@ public class BlockyTurret extends JavaPlugin implements Listener {
 	return null; // This shouldn't happen for a dispenser, but it's a good fallback just in case.
     }
 
+    private void consumeItemFromDispenser(Dispenser dispenser, Material material) {
+	for (int i = 0; i < dispenser.getInventory().getSize(); i++) {
+    	    ItemStack item = dispenser.getInventory().getItem(i);
+    	    if (item != null && item.getType() == material) {
+        	if (item.getAmount() > 1) {
+            	    item.setAmount(item.getAmount() - 1);
+        	} else {
+            	    dispenser.getInventory().clear(i);
+        	}
+        	break; // stop after consuming one item
+    	    }
+	}
+    }
+
     private boolean isWoodLog(Material material) {
         switch (material) {
             case OAK_LOG:
@@ -320,6 +354,38 @@ public class BlockyTurret extends JavaPlugin implements Listener {
             case JUNGLE_LOG:
             case ACACIA_LOG:
             case DARK_OAK_LOG:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private boolean plantSapling(Block block, ItemStack item) {
+        Material below = block.getType();
+	Block aboveBlock = block.getRelative(BlockFace.UP);
+        Material above = aboveBlock.getType();
+        boolean canPlant = 
+	    (below == Material.GRASS_BLOCK || 
+	    below == Material.DIRT ||
+	    below == Material.COARSE_DIRT || 
+	    below == Material.ROOTED_DIRT || 
+	    below == Material.MUD || 
+	    below == Material.MUDDY_MANGROVE_ROOTS || 
+	    below == Material.FARMLAND 
+	    ) && above == Material.AIR;
+	if(canPlant)aboveBlock.setType(item.getType());
+	return canPlant;
+    }
+
+    private boolean isTreeSapling(Material material) {
+        switch (material) {
+            case OAK_SAPLING:
+            case SPRUCE_SAPLING:
+            case BIRCH_SAPLING:
+            case JUNGLE_SAPLING:
+            case ACACIA_SAPLING:
+            case DARK_OAK_SAPLING:
+	    case CHERRY_SAPLING:
                 return true;
             default:
                 return false;
