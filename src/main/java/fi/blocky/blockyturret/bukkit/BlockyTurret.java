@@ -56,7 +56,9 @@ import org.bukkit.util.Vector;
 import io.papermc.paper.threadedregions.scheduler.RegionScheduler;
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 
+import java.util.Collection;
 import java.util.Collections;
+//import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -263,6 +265,18 @@ public class BlockyTurret extends JavaPlugin implements Listener {
             ItemStack[] contents = dispenser.getInventory().getContents();
 //            getLogger().info("CHECKPOINT1");
 	    ItemStack dispensedItem = event.getItem();
+	    BlockFace facing = getDispenserFacing(dispenser.getBlock());
+	    Block frontBlock = event.getBlock().getRelative(facing);
+	    if (dispensedItem.getType() == Material.DIAMOND_SWORD) {
+		dealDamage(dispenser);
+		event.setCancelled(true); // Prevent the hoe from being dispensed
+		return;
+	    }else
+	    if (dispensedItem.getType() == Material.DIAMOND_HOE) {
+		canPlow(dispenser, frontBlock, dispensedItem);
+		event.setCancelled(true); // Prevent the hoe from being dispensed
+		return;
+	    } else
 	    if (dispensedItem.getType() == Material.DIAMOND_AXE) {
         	chopWood(event.getBlock());
         	event.setCancelled(true); // Prevent the axe from being dispensed
@@ -272,8 +286,6 @@ public class BlockyTurret extends JavaPlugin implements Listener {
         	event.setCancelled(true); // Prevent the pickaxe from being dispensed
 		return;
     	    } else if (isTreeSapling(dispensedItem.getType())) {
-                BlockFace facing = getDispenserFacing(dispenser.getBlock());
-                Block frontBlock = event.getBlock().getRelative(facing);
                 if (plantSapling(frontBlock, dispensedItem)) {
 //                    frontBlock.setType(dispensedItem.getType());
                     event.setCancelled(true);  // Prevent the sapling from being dispensed out
@@ -289,11 +301,29 @@ public class BlockyTurret extends JavaPlugin implements Listener {
 		    );
 		    return;
                 }
-            }
+            } else if (plowAndPlantSeed(dispenser, frontBlock, dispensedItem)){
+                    event.setCancelled(true);  // Prevent the sapling from being dispensed out
+
+		    // Schedule the sapling consumption for the next tick
+		    regionScheduler.runDelayed(
+			this,
+			dispenser.getBlock().getLocation(),
+			(task) -> {
+		    		consumeItemFromDispenser(dispenser, dispensedItem.getType());
+			},
+			1L
+		    );
+		    return;
+	    }
             for (ItemStack item : contents) {
 //		getLogger().info("CHECKPOINT1.5");
                 if (item != null) {
 //		    getLogger().info("CHECKPOINT2");
+		    if (item.getType() == Material.DIAMOND_SWORD) {
+			dealDamage(dispenser);
+			event.setCancelled(true); // Prevent the sword from being dispensed
+			return;
+		    } else
                     if (item.getType() == Material.DIAMOND_AXE) {
 //			getLogger().info("CHECKPOINT3");
                         chopWood(dispenser.getBlock());
@@ -390,6 +420,95 @@ public class BlockyTurret extends JavaPlugin implements Listener {
             default:
                 return false;
         }
+    }
+
+    private boolean isSeed(Material material) {
+	switch (material) {
+    	    case WHEAT_SEEDS:
+    	    case BEETROOT_SEEDS:
+    	    case MELON_SEEDS:
+    	    case PUMPKIN_SEEDS:
+	    case TORCHFLOWER_SEEDS:
+        	return true;
+    	    default:
+        	return false;
+	}
+    }
+
+    private boolean plowAndPlantSeed(Dispenser dispenser, Block block, ItemStack item) {
+        Material below = block.getType();
+	Block aboveBlock = block.getRelative(BlockFace.UP);
+        Material above = aboveBlock.getType();
+        boolean canPlow = canPlow(dispenser, block, item);
+	boolean canPlant = (
+	    below == Material.FARMLAND 
+	    ) && above == Material.AIR && isSeed(item.getType());
+	if(canPlant){
+	    aboveBlock.setType(getPlantTypeFromSeed(item.getType()));
+	}
+	return canPlant;
+    }
+
+    private boolean canPlow(Dispenser dispenser, Block block, ItemStack item){
+        Material below = block.getType();
+	Block aboveBlock = block.getRelative(BlockFace.UP);
+        Material above = aboveBlock.getType();
+        boolean canPlow = 
+	    (below == Material.GRASS_BLOCK || 
+	    below == Material.DIRT ||
+	    below == Material.COARSE_DIRT || 
+	    below == Material.ROOTED_DIRT 
+	    ) && above == Material.AIR && dispenserContainsHoe(dispenser, item);
+	if(canPlow){
+	    block.setType(Material.FARMLAND);
+	}
+	return canPlow;
+    }
+
+    private boolean dispenserContainsHoe(Dispenser dispenser, ItemStack dispensedItem) {
+    	if (dispensedItem != null && (dispensedItem.getType() == Material.DIAMOND_HOE)) {
+    	    return true;
+    	}
+	for (ItemStack item : dispenser.getInventory().getContents()) {
+    	    if (item != null && (item.getType() == Material.DIAMOND_HOE)) {
+        	return true;
+    	    }
+	}
+	return false;
+    }
+
+    private Material getPlantTypeFromSeed(Material seedType) {
+	switch (seedType) {
+    	    case WHEAT_SEEDS:
+        	return Material.WHEAT;
+    	    case BEETROOT_SEEDS:
+        	 return Material.BEETROOTS;
+    	    case MELON_SEEDS:
+        	return Material.MELON_STEM;
+    	    case PUMPKIN_SEEDS:
+        	return Material.PUMPKIN_STEM;
+	    case TORCHFLOWER_SEEDS:
+		return Material.TORCHFLOWER;
+    	    default:
+        	return null;
+	}
+    }
+
+    private void dealDamage(Dispenser dispenser){
+	BlockFace facing = getDispenserFacing(dispenser.getBlock());
+        Collection<Entity> entities = getEntitiesInFrontOfDispenser(dispenser, facing);
+
+        for (Entity entity : entities) {
+            if (entity instanceof LivingEntity) {
+                LivingEntity livingEntity = (LivingEntity) entity;
+                livingEntity.damage(7); // Diamond sword deals 7 points (3.5 hearts) of damage
+            }
+        }
+    }
+
+    private Collection<Entity> getEntitiesInFrontOfDispenser(Dispenser dispenser, BlockFace facing) {
+	Location loc = dispenser.getLocation().add(0.5, 0.5, 0.5).add(facing.getModX(), facing.getModY(), facing.getModZ());
+	return loc.getWorld().getNearbyEntities(loc, 1.5, 1.5, 1.5);  // Adjust the radius if needed
     }
 
     private boolean authorizeInvAccess(Block block, Player player){
