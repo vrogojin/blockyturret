@@ -124,7 +124,7 @@ public class BlockyTurret extends JavaPlugin implements Listener {
 		20L
 	    );*/
 	    scheduleTurret(block);
-            getLogger().info("BlockyTurret created");
+//            getLogger().info("BlockyTurret created");
         }
     }
 
@@ -146,7 +146,7 @@ public class BlockyTurret extends JavaPlugin implements Listener {
 	      if(isTurret(block)){
 //                turrets.add(block.getLocation());
 		scheduleTurret(block);
-		getLogger().info("BlockyTurret loaded");
+//		getLogger().info("BlockyTurret loaded");
 	      }
 	      if(blockState instanceof TileState) {
 		TileState tileState = (TileState)blockState;
@@ -316,26 +316,21 @@ public class BlockyTurret extends JavaPlugin implements Listener {
 		    return;
 	    }
             for (ItemStack item : contents) {
-//		getLogger().info("CHECKPOINT1.5");
                 if (item != null) {
-//		    getLogger().info("CHECKPOINT2");
 		    if (item.getType() == Material.DIAMOND_SWORD) {
 			dealDamage(dispenser);
 			event.setCancelled(true); // Prevent the sword from being dispensed
 			return;
 		    } else
                     if (item.getType() == Material.DIAMOND_AXE) {
-//			getLogger().info("CHECKPOINT3");
                         chopWood(dispenser.getBlock());
                         event.setCancelled(true); // Prevent the axe from being dispensed
                         return;
                     } else if (item.getType() == Material.DIAMOND_PICKAXE) {
-//			getLogger().info("CHECKPOINT4");
                         breakBlock(dispenser.getBlock());
                         event.setCancelled(true); // Prevent the pickaxe from being dispensed
                         return;
                     }
-//		    getLogger().info("CHECKPOINT5");
                 }
             }
         }
@@ -602,8 +597,13 @@ public class BlockyTurret extends JavaPlugin implements Listener {
     }
 
     private boolean blockNeighborhoodFree(Block block, Player player){
+	int spawn_safe_r = 127;
 	int r = 15;
         Location loc = block.getLocation();
+	Location spawn = loc.getWorld().getSpawnLocation();
+	
+	if((Math.abs(spawn.getBlockX()-loc.getBlockX())<=spawn_safe_r)&&(Math.abs(spawn.getBlockZ()-loc.getBlockZ())<=spawn_safe_r))
+	    return false;
         for (int x = -r; x <= r; x++) {
             for (int y = -r; y <= r; y++) {
                 for (int z = -r; z <= r; z++) {
@@ -638,19 +638,14 @@ public class BlockyTurret extends JavaPlugin implements Listener {
 
     private ScheduledTask scheduleTurret(Block block){
 	Location location = block.getLocation();
-//	getLogger().info("CHECKPOINT1");
 	try{
 	    if(!acquireTurretTaskSemaphore(location))return null;
-//	    getLogger().info("CHECKPOINT2");
 	    return regionScheduler.runDelayed(
 		this,
 		location,
 		(task) -> {
-//		    getLogger().info("CHECKPOINT3");
 		    releaseTurretTaskSemaphore(location);
-//		    getLogger().info("CHECKPOINT4");
 		    runTurret(location);
-//		    getLogger().info("CHECKPOINT5");
 		},
 		20L
 	    );
@@ -669,7 +664,7 @@ public class BlockyTurret extends JavaPlugin implements Listener {
         	// The turret has been destroyed, remove it from the set
 //        	iterator.remove();
 		blockPassphrases.remove(turretLoc);
-        	getLogger().info("BlockyTurret destroyed");
+//        	getLogger().info("BlockyTurret destroyed");
         	return;
     	    }
 
@@ -700,10 +695,10 @@ public class BlockyTurret extends JavaPlugin implements Listener {
                                 10,  // Count of particles
                                 0.5, 0.5, 0.5,  // Offset
                                 0);  // Speed
-			getLogger().info("Entity is authorized or dead, skipping");
+//			getLogger().info("Entity is authorized or dead, skipping");
 		        continue;
 		    }
-            	    getLogger().info("Target detected");
+//            	    getLogger().info("Target detected");
             	    Location[] entityLocations = new Location[3];
             	    entityLocations[0] = entity.getLocation().clone().add(0, entity.getHeight() * 0.75, 0); // Aim at the upper part of the entity
             	    entityLocations[1] = entity.getLocation().clone().add(0, entity.getHeight() * 0.5, 0); // Aim at the center of the entity
@@ -714,7 +709,7 @@ public class BlockyTurret extends JavaPlugin implements Listener {
                 	double distanceToEntity = directionToEntity.length();
                 	directionToEntity.normalize();
                 	if (directionToEntity.dot(turretFacingDirection) > 0.5) {
-                    	    getLogger().info("Target acquired");
+//                    	    getLogger().info("Target acquired");
                     	    // Check if there is a direct line-of-sight between the turret and the entity.
                     	    RayTraceResult rayTraceResult = world.rayTraceBlocks(turretEyeLocation, directionToEntity, distanceToEntity, FluidCollisionMode.NEVER, true);
                     	    if (rayTraceResult == null) {
@@ -731,7 +726,7 @@ public class BlockyTurret extends JavaPlugin implements Listener {
                             	    targetDistance = distanceToEntity;
                             	    break;
                         	}
-                        	getLogger().info("Target inaccessible");
+//                        	getLogger().info("Target inaccessible");
                     	    }
                 	}
             	    }
@@ -770,7 +765,7 @@ public class BlockyTurret extends JavaPlugin implements Listener {
             
         	    // Play dispenser sound
         	    world.playEffect(turretEyeLocation, Effect.CLICK2, 0);
-        	    getLogger().info("Piu!!!");
+//        	    getLogger().info("Piu!!!");
     		}
 	    }
 
