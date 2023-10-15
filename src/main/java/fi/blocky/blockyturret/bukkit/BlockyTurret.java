@@ -23,13 +23,18 @@ import org.bukkit.entity.Arrow;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.LivingEntity;
+import org.bukkit.entity.Monster;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockDispenseEvent;
+import org.bukkit.event.block.BlockIgniteEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.entity.CreatureSpawnEvent;
+import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.inventory.FurnaceBurnEvent;
 import org.bukkit.event.inventory.FurnaceSmeltEvent;
 import org.bukkit.event.inventory.InventoryMoveItemEvent;
@@ -38,6 +43,7 @@ import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.event.world.ChunkUnloadEvent;
+import org.bukkit.event.world.PortalCreateEvent;
 import org.bukkit.inventory.BlastingRecipe;
 import org.bukkit.inventory.FurnaceInventory;
 import org.bukkit.inventory.FurnaceRecipe;
@@ -178,6 +184,7 @@ public class BlockyTurret extends JavaPlugin implements Listener {
 	Block clickedBlock = event.getClickedBlock();
 
 	if(clickedBlock == null)return;
+	if(isNearSpawn(clickedBlock.getLocation()))event.setCancelled(true);
 	BlockState blockState = clickedBlock.getState();
 	if (clickedBlock != null && (blockState instanceof TileState)) {
 	    ItemStack itemInHand = player.getInventory().getItemInMainHand();
@@ -336,6 +343,77 @@ public class BlockyTurret extends JavaPlugin implements Listener {
         }
     }
 
+    @EventHandler
+    public void onCreatureSpawn(CreatureSpawnEvent event) {
+        // Check if the spawned entity is a Monster (hostile mob)
+        if (event.getEntity() instanceof Monster) {
+            // Check if it's within the protected radius
+//	    int spawn_safe_r = 127;
+    	    Location loc = event.getLocation();
+//	    Location spawn = loc.getWorld().getSpawnLocation();
+	
+//	    if((Math.abs(spawn.getBlockX()-loc.getBlockX())<=spawn_safe_r)&&(Math.abs(spawn.getBlockZ()-loc.getBlockZ())<=spawn_safe_r))
+	    if(isNearSpawn(event.getLocation()))
+		event.setCancelled(true);
+        }
+    }
+
+    @EventHandler
+    public void onBlockIgnite(BlockIgniteEvent event) {
+/*        if (event.getBlock().getLocation().distanceSquared(protectedLocation) <= radiusSquared) {
+            event.setCancelled(true);
+        }*/
+	if(isNearSpawn(event.getBlock().getLocation()))
+            event.setCancelled(true);
+    }
+
+    @EventHandler
+    public void onEntityExplode(EntityExplodeEvent event) {
+/*        if (event.getLocation().distanceSquared(protectedLocation) <= radiusSquared) {
+            event.setCancelled(true);
+        }*/
+	if(isNearSpawn(event.getLocation()))
+            event.setCancelled(true);
+    }
+
+    @EventHandler
+    public void onEntityDamage(EntityDamageEvent event) {
+        Entity entity = event.getEntity();
+	if(isNearSpawn(entity.getLocation()))
+            event.setCancelled(true);
+
+/*        if (entity.getLocation().distanceSquared(protectedLocation) <= radiusSquared) {
+            event.setCancelled(true);
+        }*/
+    }
+
+    @EventHandler
+    public void onPortalCreate(PortalCreateEvent event) {
+        // Get the world spawn location
+//        Location spawnLocation = event.getWorld().getSpawnLocation();
+
+        // Check if any block in the portal is within 128 blocks of spawn
+        for (BlockState blockState : event.getBlocks()) {
+	    Location blockLocation = blockState.getLocation();
+	    if(isNearSpawn(blockLocation)){
+                // Cancel the event if it's within the restricted area
+                event.setCancelled(true);
+                return;
+            }
+        }
+    }
+
+    private boolean isNearSpawn(Location loc){
+	int spawn_safe_r = 127;
+	World world = loc.getWorld();
+
+	if(world.getEnvironment() != World.Environment.NORMAL)return false;
+
+	Location spawn = world.getSpawnLocation();
+
+	return ((Math.abs(spawn.getBlockX()-loc.getBlockX())<=spawn_safe_r)&&(Math.abs(spawn.getBlockZ()-loc.getBlockZ())<=spawn_safe_r));
+    }
+    
     private void chopWood(Block dispenserBlock) {
         BlockFace facing = getDispenserFacing(dispenserBlock);
         Block targetBlock = dispenserBlock.getRelative(facing);
@@ -597,12 +675,13 @@ public class BlockyTurret extends JavaPlugin implements Listener {
     }
 
     private boolean blockNeighborhoodFree(Block block, Player player){
-	int spawn_safe_r = 127;
+//	int spawn_safe_r = 127;
 	int r = 15;
         Location loc = block.getLocation();
-	Location spawn = loc.getWorld().getSpawnLocation();
+//	Location spawn = loc.getWorld().getSpawnLocation();
 	
-	if((Math.abs(spawn.getBlockX()-loc.getBlockX())<=spawn_safe_r)&&(Math.abs(spawn.getBlockZ()-loc.getBlockZ())<=spawn_safe_r))
+//	if((Math.abs(spawn.getBlockX()-loc.getBlockX())<=spawn_safe_r)&&(Math.abs(spawn.getBlockZ()-loc.getBlockZ())<=spawn_safe_r))
+	if(isNearSpawn(loc))
 	    return false;
         for (int x = -r; x <= r; x++) {
             for (int y = -r; y <= r; y++) {
