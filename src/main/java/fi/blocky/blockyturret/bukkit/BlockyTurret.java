@@ -3,6 +3,7 @@ package fi.blocky.blockyturret.bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Effect;
 import org.bukkit.FluidCollisionMode;
+import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
@@ -19,11 +20,15 @@ import org.bukkit.block.Furnace;
 import org.bukkit.block.Sign;
 import org.bukkit.block.TileState;
 import org.bukkit.block.data.Directional;
+import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Arrow;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Hanging;
+import org.bukkit.entity.ItemFrame;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Monster;
+import org.bukkit.entity.Painting;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -35,11 +40,13 @@ import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.CreatureSpawnEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
+import org.bukkit.event.hanging.HangingBreakByEntityEvent;
 import org.bukkit.event.inventory.FurnaceBurnEvent;
 import org.bukkit.event.inventory.FurnaceSmeltEvent;
 import org.bukkit.event.inventory.InventoryMoveItemEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.event.inventory.InventoryType;
+import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.event.world.ChunkUnloadEvent;
@@ -179,8 +186,36 @@ public class BlockyTurret extends JavaPlugin implements Listener {
     }*/
 
     @EventHandler
+    public void onHangingBreakByEntity(HangingBreakByEntityEvent event) {
+        Entity remover = event.getRemover();
+        Hanging hanging = event.getEntity();
+
+        // Check if a player is trying to remove the entity
+        if (remover instanceof Player) {
+            // Preventing interaction with Item Frames and Paintings
+            if (hanging instanceof ItemFrame || hanging instanceof Painting) {
+		if(isNearSpawn(hanging.getLocation()))event.setCancelled(true);
+            }
+        }
+    }
+
+    @EventHandler
+    public void onPlayerInteractEntity(PlayerInteractEntityEvent event) {
+        Entity entity = event.getRightClicked();
+
+        // Preventing interaction with Armor Stands
+        if (
+		(entity instanceof ArmorStand)||
+		(entity instanceof ItemFrame)
+	    ) {
+	    if(isNearSpawn(entity.getLocation()))event.setCancelled(true);
+        }
+    }
+
+    @EventHandler
     public void onPlayerInteract(PlayerInteractEvent event) {
 	Player player = event.getPlayer();
+	if (player.getGameMode() == GameMode.CREATIVE && player.isOp())return;
 	Block clickedBlock = event.getClickedBlock();
 
 	if(clickedBlock == null)return;
@@ -346,7 +381,7 @@ public class BlockyTurret extends JavaPlugin implements Listener {
     @EventHandler
     public void onCreatureSpawn(CreatureSpawnEvent event) {
         // Check if the spawned entity is a Monster (hostile mob)
-        if (event.getEntity() instanceof Monster) {
+        if ((event.getEntity() instanceof Monster)||(event.getEntityType() == EntityType.PHANTOM)) {
             // Check if it's within the protected radius
 //	    int spawn_safe_r = 127;
     	    Location loc = event.getLocation();
@@ -675,6 +710,7 @@ public class BlockyTurret extends JavaPlugin implements Listener {
     }
 
     private boolean blockNeighborhoodFree(Block block, Player player){
+	if (player.getGameMode() == GameMode.CREATIVE && player.isOp())return true;
 //	int spawn_safe_r = 127;
 	int r = 15;
         Location loc = block.getLocation();
