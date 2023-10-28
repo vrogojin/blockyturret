@@ -104,12 +104,6 @@ public class BlockyTurret extends JavaPlugin implements Listener {
 	passphraseKey = new NamespacedKey(this, "BlockyTurret_turretPassphrase");
 
 	createEmeraldBurnRecipe();
-/*        new BukkitRunnable() {
-            @Override
-            public void run() {
-                checkTurrets();
-            }
-        }.runTaskTimer(this, 0, 20); // Run every second (20 ticks)*/
         getLogger().info("BlockyTurret plugin enabled");
     }
 
@@ -125,19 +119,8 @@ public class BlockyTurret extends JavaPlugin implements Listener {
             event.setCancelled(true);
             return;
         }
-//        if (block.getType() == Material.DISPENSER && block.getRelative(0, -1, 0).getType() == Material.OBSERVER) {
 	  if(isTurret(block)){
-//            turrets.add(block.getLocation());
-/*	    regionScheduler.runDelayed(
-		this,
-		block.getLocation(),
-		(task) -> {
-		    runTurret(block.getLocation());
-		},
-		20L
-	    );*/
 	    scheduleTurret(block);
-//            getLogger().info("BlockyTurret created");
         }
     }
 
@@ -157,9 +140,7 @@ public class BlockyTurret extends JavaPlugin implements Listener {
         for (BlockState blockState : event.getChunk().getTileEntities()) {
     	      Block block = blockState.getBlock();
 	      if(isTurret(block)){
-//                turrets.add(block.getLocation());
 		scheduleTurret(block);
-//		getLogger().info("BlockyTurret loaded");
 	      }
 	      if(blockState instanceof TileState) {
 		TileState tileState = (TileState)blockState;
@@ -171,19 +152,6 @@ public class BlockyTurret extends JavaPlugin implements Listener {
     	      }
         }
     }
-
-/*    @EventHandler
-    public void onChunkUnload(ChunkUnloadEvent event) {
-        Iterator<Location> iterator = turrets.iterator();
-        while (iterator.hasNext()) {
-            Location turretLoc = iterator.next();
-            if (turretLoc.getChunk().equals(event.getChunk())) {
-                iterator.remove();
-		turretPassphrases.remove(turretLoc);
-                getLogger().info("BlockyTurret unloaded");
-            }
-        }
-    }*/
 
     @EventHandler
     public void onHangingBreakByEntity(HangingBreakByEntityEvent event) {
@@ -305,7 +273,6 @@ public class BlockyTurret extends JavaPlugin implements Listener {
         if (event.getBlock().getType() == Material.DISPENSER) {
             Dispenser dispenser = (Dispenser) event.getBlock().getState();
             ItemStack[] contents = dispenser.getInventory().getContents();
-//            getLogger().info("CHECKPOINT1");
 	    ItemStack dispensedItem = event.getItem();
 	    BlockFace facing = getDispenserFacing(dispenser.getBlock());
 	    Block frontBlock = event.getBlock().getRelative(facing);
@@ -329,7 +296,6 @@ public class BlockyTurret extends JavaPlugin implements Listener {
 		return;
     	    } else if (isTreeSapling(dispensedItem.getType())) {
                 if (plantSapling(frontBlock, dispensedItem)) {
-//                    frontBlock.setType(dispensedItem.getType());
                     event.setCancelled(true);  // Prevent the sapling from being dispensed out
 
 		    // Schedule the sapling consumption for the next tick
@@ -383,11 +349,8 @@ public class BlockyTurret extends JavaPlugin implements Listener {
         // Check if the spawned entity is a Monster (hostile mob)
         if ((event.getEntity() instanceof Monster)||(event.getEntityType() == EntityType.PHANTOM)) {
             // Check if it's within the protected radius
-//	    int spawn_safe_r = 127;
     	    Location loc = event.getLocation();
-//	    Location spawn = loc.getWorld().getSpawnLocation();
 	
-//	    if((Math.abs(spawn.getBlockX()-loc.getBlockX())<=spawn_safe_r)&&(Math.abs(spawn.getBlockZ()-loc.getBlockZ())<=spawn_safe_r))
 	    if(isNearSpawn(event.getLocation()))
 		event.setCancelled(true);
         }
@@ -395,18 +358,12 @@ public class BlockyTurret extends JavaPlugin implements Listener {
 
     @EventHandler
     public void onBlockIgnite(BlockIgniteEvent event) {
-/*        if (event.getBlock().getLocation().distanceSquared(protectedLocation) <= radiusSquared) {
-            event.setCancelled(true);
-        }*/
 	if(isNearSpawn(event.getBlock().getLocation()))
             event.setCancelled(true);
     }
 
     @EventHandler
     public void onEntityExplode(EntityExplodeEvent event) {
-/*        if (event.getLocation().distanceSquared(protectedLocation) <= radiusSquared) {
-            event.setCancelled(true);
-        }*/
 	if(isNearSpawn(event.getLocation()))
             event.setCancelled(true);
     }
@@ -416,16 +373,11 @@ public class BlockyTurret extends JavaPlugin implements Listener {
         Entity entity = event.getEntity();
 	if(isNearSpawn(entity.getLocation()))
             event.setCancelled(true);
-
-/*        if (entity.getLocation().distanceSquared(protectedLocation) <= radiusSquared) {
-            event.setCancelled(true);
-        }*/
     }
 
     @EventHandler
     public void onPortalCreate(PortalCreateEvent event) {
         // Get the world spawn location
-//        Location spawnLocation = event.getWorld().getSpawnLocation();
 
         // Check if any block in the portal is within 128 blocks of spawn
         for (BlockState blockState : event.getBlocks()) {
@@ -702,7 +654,9 @@ public class BlockyTurret extends JavaPlugin implements Listener {
 
         // Create the furnace recipe with long cooking time
         FurnaceRecipe burnEmerald = new FurnaceRecipe(new NamespacedKey(this, "generate_protection"), resultItem, sourceItem.getType(), 0, 72000);  // 72000 ticks = 1 hour
+	burnEmerald.setCookingTime(72000*9);
 	BlastingRecipe blastingRecipe = new BlastingRecipe(new NamespacedKey(this, "emerald_to_ender_pearl_blasting"), resultItem, sourceItem.getType(), 0.1f, 144000);  // 36000 ticks = 30 minutes
+	blastingRecipe.setCookingTime(144000*9);
 
         // Add the recipe to the server
         getServer().addRecipe(burnEmerald);
@@ -743,7 +697,8 @@ public class BlockyTurret extends JavaPlugin implements Listener {
 	    if(burnTime>0){
 		ItemStack smeltingItem = (blockType == Material.FURNACE)?((Furnace)block.getState()).getInventory().getSmelting():
 		    ((BlastFurnace)block.getState()).getInventory().getSmelting();
-		if(smeltingItem.getType() == Material.EMERALD){
+		Material smeltMaterial = smeltingItem.getType();
+		if((smeltMaterial != null)&&(smeltMaterial == Material.EMERALD)){
 		    return false;
 		}
 	    }
@@ -774,17 +729,13 @@ public class BlockyTurret extends JavaPlugin implements Listener {
     	    World world = turretLoc.getWorld();
     	    Block block = turretLoc.getBlock();
 
-//    	    if (block.getType() != Material.DISPENSER) {
 	    if(!isTurret(block)){
         	// The turret has been destroyed, remove it from the set
-//        	iterator.remove();
 		blockPassphrases.remove(turretLoc);
-//        	getLogger().info("BlockyTurret destroyed");
         	return;
     	    }
 
     	    Dispenser dispenser = (Dispenser) block.getState();
-//    	    ItemStack projectile = dispenser.getInventory().getItem(0);
     	    ItemStack projectile = getProjectile(dispenser);
 
     	    if (projectile == null) {
@@ -810,10 +761,8 @@ public class BlockyTurret extends JavaPlugin implements Listener {
                                 10,  // Count of particles
                                 0.5, 0.5, 0.5,  // Offset
                                 0);  // Speed
-//			getLogger().info("Entity is authorized or dead, skipping");
 		        continue;
 		    }
-//            	    getLogger().info("Target detected");
             	    Location[] entityLocations = new Location[3];
             	    entityLocations[0] = entity.getLocation().clone().add(0, entity.getHeight() * 0.75, 0); // Aim at the upper part of the entity
             	    entityLocations[1] = entity.getLocation().clone().add(0, entity.getHeight() * 0.5, 0); // Aim at the center of the entity
@@ -824,7 +773,6 @@ public class BlockyTurret extends JavaPlugin implements Listener {
                 	double distanceToEntity = directionToEntity.length();
                 	directionToEntity.normalize();
                 	if (directionToEntity.dot(turretFacingDirection) > 0.5) {
-//                    	    getLogger().info("Target acquired");
                     	    // Check if there is a direct line-of-sight between the turret and the entity.
                     	    RayTraceResult rayTraceResult = world.rayTraceBlocks(turretEyeLocation, directionToEntity, distanceToEntity, FluidCollisionMode.NEVER, true);
                     	    if (rayTraceResult == null) {
@@ -841,7 +789,6 @@ public class BlockyTurret extends JavaPlugin implements Listener {
                             	    targetDistance = distanceToEntity;
                             	    break;
                         	}
-//                        	getLogger().info("Target inaccessible");
                     	    }
                 	}
             	    }
@@ -880,7 +827,6 @@ public class BlockyTurret extends JavaPlugin implements Listener {
             
         	    // Play dispenser sound
         	    world.playEffect(turretEyeLocation, Effect.CLICK2, 0);
-//        	    getLogger().info("Piu!!!");
     		}
 	    }
 
