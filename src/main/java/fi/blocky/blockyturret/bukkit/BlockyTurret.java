@@ -150,6 +150,30 @@ public class BlockyTurret extends JavaPlugin implements Listener {
             	    blockPassphrases.put(block.getLocation(), passphrase);
             	}
     	      }
+	      if (blockState instanceof Furnace) { // Check if the tile entity is a furnace
+                Furnace furnace = (Furnace) blockState;
+                if (furnace.getInventory().getSmelting() != null &&
+                    furnace.getInventory().getSmelting().getType() == Material.EMERALD) { // Check if the smelting item is an emerald
+                    
+                    // Reset the furnace burn time or cook time
+//                    furnace.setBurnTime((short) 0);
+                    furnace.setCookTime((short) 0);
+                    furnace.update(); // Update the furnace to apply changes
+                }
+            }
+	    if (blockState instanceof BlastFurnace) { // Check if the tile entity is a furnace
+                BlastFurnace furnace = (BlastFurnace) blockState;
+                if (furnace.getInventory().getSmelting() != null &&
+                    furnace.getInventory().getSmelting().getType() == Material.EMERALD) { // Check if the smelting item is an emerald
+                    
+                    // Reset the furnace burn time or cook time
+//                    furnace.setBurnTime((short) 0);
+                    furnace.setCookTime((short) 0);
+                    furnace.update(); // Update the furnace to apply changes
+                }
+            }
+
+
         }
     }
 
